@@ -155,10 +155,12 @@ for pipeline_ = 1:3
                             % calculate correlation matrix
                             for subject = 1:numberOfControls
                                 
-                                scrubbingPortion = round((meanScrubbingControls + stdScrubbingControls * randn));
+								% Randomize how many time points to save
+                                scrubbingPortion = abs(round((meanScrubbingControls + stdScrubbingControls * randn)));
                                 savedTimepoints = round(numberOfTimepoints * (100 - scrubbingPortion)/100);
                                 savedTimepoints = min(savedTimepoints,numberOfTimepoints); % We cannot save more time points than we start with
                                 savedTimepoints = max(savedTimepoints,50); %Always save at least 50 time points
+
                                 % Do random scrubbing
                                 keep = [ones(savedTimepoints,1); zeros(numberOfTimepoints - savedTimepoints,1)];
                                 keep = keep(randperm(numberOfTimepoints));
@@ -170,16 +172,7 @@ for pipeline_ = 1:3
                                     allCorrelations = nets_netmats(scrubbedData',convert_to_z,'ridgep',partialCorrelationRegularization);
                                 end
                                 
-                                for p1 = 1:numberOfParcels
-                                    for p2 = 1:numberOfParcels
-                                        %if p2 < p1
-                                        %r = corr2(scrubbedData(p1,:),scrubbedData(p2,:));
-                                        r = allCorrelations(p1,p2);
-                                        % Fisher transformation
-                                        correlationMatrixControls(subject,p1,p2) = r;
-                                        %end
-                                    end
-                                end
+								correlationMatrixControls(subject,:,:) = allCorrelations;
                                 
                             end
                             
@@ -187,10 +180,12 @@ for pipeline_ = 1:3
                             % and calculate correlation matrix
                             for subject = 1:numberOfDiseased
                                 
-                                scrubbingPortion = round((meanScrubbingDiseased + stdScrubbingDiseased * randn));
+								% Randomize how many time points to save
+                                scrubbingPortion = abs(round((meanScrubbingDiseased + stdScrubbingDiseased * randn)));
                                 savedTimepoints = round(numberOfTimepoints * (100 - scrubbingPortion)/100);
                                 savedTimepoints = min(savedTimepoints,numberOfTimepoints); % We cannot save more time points than we start with
                                 savedTimepoints = max(savedTimepoints,50); %Always save at least 50 time points
+
                                 % Do random scrubbing
                                 keep = [ones(savedTimepoints,1); zeros(numberOfTimepoints - savedTimepoints,1)];
                                 keep = keep(randperm(numberOfTimepoints));
@@ -201,17 +196,8 @@ for pipeline_ = 1:3
                                 else
                                     allCorrelations = nets_netmats(scrubbedData',convert_to_z,'ridgep',partialCorrelationRegularization);
                                 end
-                                
-                                for p1 = 1:numberOfParcels
-                                    for p2 = 1:numberOfParcels
-                                        %if p2 < p1
-                                        %r = corr2(scrubbedData(p1,:),scrubbedData(p2,:));
-                                        r = allCorrelations(p1,p2);
-                                        % Fisher transformation
-                                        correlationMatrixDiseased(subject,p1,p2) = r;
-                                        %end
-                                    end
-                                end
+
+								correlationMatrixDiseased(subject,:,:) = allCorrelations;
                                 
                             end
                             
@@ -259,8 +245,7 @@ for pipeline_ = 1:3
                                 
                             else
                                 
-                                t_scores1 = zeros(numberOfParcels);
-                                t_scores2 = zeros(numberOfParcels);
+                                t_scores = zeros(numberOfParcels);
                                 
                                 for p1 = 1:numberOfParcels
                                     for p2 = 1:numberOfParcels
@@ -270,19 +255,11 @@ for pipeline_ = 1:3
                                             diseased = correlationMatrixDiseased(:,p1,p2);
                                             
                                             try
-                                                [H,P,CI,STATS] = ttest2(controls,diseased,'tail','right');
-                                                %[H,P,CI,STATS] = ttest2(controls,diseased,'vartype','unequal','tail','right');
-                                                t_scores1(p1,p2) = STATS.tstat;
+                                                [H,P,CI,STATS] = ttest2(controls,diseased);
+                                                %[H,P,CI,STATS] = ttest2(controls,diseased,'vartype','unequal');
+                                                t_scores(p1,p2) = STATS.tstat;
                                             catch
                                                 errors1(simulation) = 1;
-                                            end
-                                            
-                                            try
-                                                [H,P,CI,STATS] = ttest2(controls,diseased,'tail','left');
-                                                %[H,P,CI,STATS] = ttest2(controls,diseased,'vartype','unequal','tail','left');
-                                                t_scores2(p1,p2) = STATS.tstat;
-                                            catch
-                                                errors2(simulation) = 1;
                                             end
                                             
                                         end
@@ -292,11 +269,11 @@ for pipeline_ = 1:3
                                 threshold = icdf('t',1-0.05,numberOfControls + numberOfDiseased - 2);
                                 FWEthreshold = icdf('t',1-0.05/numberOfTests,numberOfControls + numberOfDiseased - 2);
                                 
-                                if max(t_scores1(:)) > FWEthreshold
+                                if max(t_scores(:)) > FWEthreshold
                                     FWE1(simulation) = 1;
                                 end
                                 
-                                if min(t_scores2(:)) < -1*FWEthreshold
+                                if min(t_scores(:)) < -1*FWEthreshold
                                     FWE2(simulation) = 1;
                                 end
                                 
