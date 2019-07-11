@@ -8,15 +8,21 @@ addpath(sprintf('%s/etc/matlab',getenv('FSLDIR')))
 % Number of random group analyses per parameter combination
 simulations = 1000;
 
+% Assume equal variance or not for parametric statistics
+unequalVariance = 0;
+
 % Number of parcels to analyze, do not use all parcels
+% to reduce processing time and 
 % to make it easier to do partial correlation 
 % (due to low number of timepoints)
 numberOfParcels = 50;
 
+% Use permutation test or not
 permutation = 0;
+nPerms = 1000;
 
-% Regularization for ridge p
-partialCorrelationRegularization = 100;
+% Regularization for ridge p (Tikhonov)
+partialCorrelationRegularization = 0.1s;
 
 % Number of subjects in each random group
 numberOfControls = 20;
@@ -24,8 +30,8 @@ numberOfDiseased = 20;
 
 meanScrubbingControls = 10; % Percent
 
-stdScrubbingControls = 10; % Percent
-stdScrubbingDiseased = 10; % Percent
+stdScrubbingControls = 5; % Percent
+stdScrubbingDiseased = 15; % Percent
 
 numberOfTests = 0;
 for p1 = 1:numberOfParcels
@@ -36,15 +42,18 @@ for p1 = 1:numberOfParcels
     end
 end
 
-myPool = parpool(25);
+myPool = parpool(28);
 
 % pipeline, preprocessing, site, convert to z,
 % correlation type, mean scrubbing diseased
-FWEs1 = zeros(4,4,2,2,2,10);
-FWEs2 = zeros(4,4,2,2,2,10);
+FWEs1 = zeros(4,4,2,3,2,10);
+FWEs2 = zeros(4,4,2,3,2,10);
 
-errors1_total = zeros(4,4,2,2,2,10);
-errors2_total = zeros(4,4,2,2,2,10);
+errors1_total = zeros(4,4,2,3,2,10);
+errors2_total = zeros(4,4,2,3,2,10);
+
+numberOfNansControls = zeros(4,4,2,3,2,10,numberOfControls,simulations);
+numberOfNansDiseased = zeros(4,4,2,3,2,10,numberOfDiseased,simulations);
 
 %-------
 
@@ -72,7 +81,7 @@ for pipeline_ = 1:3
             preprocessing = 'nofilt_noglobal';
         end
         
-        for site_ = 1:1
+        for site_ = 1:2
             
             if site_ == 1
                 
@@ -105,12 +114,14 @@ for pipeline_ = 1:3
             % Load current data
             load([site '_' pipeline '_' preprocessing '_cc200.mat'])
             
-            for fisher = 1:2
+            for fisher = 2:3
                 
                 if fisher == 1
-                    convert_to_z = 0;
+                    convert_to_z = 0; % No conversion to z
                 elseif fisher == 2
-                    convert_to_z = 1;
+                    convert_to_z = 1; % Conversion with autocorrelation correction
+                elseif fisher == 3 
+                    convert_to_z = -1; % Conversion without autocorrelation correction
                 end
                 
                 for correlationType = 1:2
@@ -120,7 +131,6 @@ for pipeline_ = 1:3
                     else
                         full_correlation = 0;
                     end
-                    
                     
                     % Loop over different means for scrubbing of diseased
                     iteration = 1;
@@ -133,6 +143,8 @@ for pipeline_ = 1:3
                         errors1 = zeros(simulations,1);
                         errors2 = zeros(simulations,1);
                         
+                        nans1 = zeros(simulations,1);
+                        nans2 = zeros(simulations,1);
                         
                         parfor simulation = 1:simulations
                             
@@ -162,8 +174,10 @@ for pipeline_ = 1:3
                                 savedTimepoints = max(savedTimepoints,50); %Always save at least 50 time points
 
                                 % Do random scrubbing
-                                keep = [ones(savedTimepoints,1); zeros(numberOfTimepoints - savedTimepoints,1)];
-                                keep = keep(randperm(numberOfTimepoints));
+                                %keep = [ones(savedTimepoints,1); zeros(numberOfTimepoints - savedTimepoints,1)];
+                                %keep = keep(randperm(numberOfTimepoints));
+                                % More realistic scrubbing
+                                keep = generateRandomScrubbing(numberOfTimepoints,savedTimepoints);
                                 scrubbedData = squeeze(controlData(subject,:,keep == 1));
                                 
                                 if full_correlation == 1
@@ -172,8 +186,9 @@ for pipeline_ = 1:3
                                     allCorrelations = nets_netmats(scrubbedData',convert_to_z,'ridgep',partialCorrelationRegularization);
                                 end
                                 
-								correlationMatrixControls(subject,:,:) = allCorrelations;
+                                nans1(simulation) = nans1(simulation) + sum(isnan(allCorrelations(:)));
                                 
+                                correlationMatrixControls(subject,:,:) = allCorrelations;
                             end
                             
                             % Randomly apply scrubbing to each diseased subject,
@@ -187,8 +202,10 @@ for pipeline_ = 1:3
                                 savedTimepoints = max(savedTimepoints,50); %Always save at least 50 time points
 
                                 % Do random scrubbing
-                                keep = [ones(savedTimepoints,1); zeros(numberOfTimepoints - savedTimepoints,1)];
-                                keep = keep(randperm(numberOfTimepoints));
+                                %keep = [ones(savedTimepoints,1); zeros(numberOfTimepoints - savedTimepoints,1)];
+                                %keep = keep(randperm(numberOfTimepoints));
+                                % More realistic scrubbing
+                                keep = generateRandomScrubbing(numberOfTimepoints,savedTimepoints);
                                 scrubbedData = squeeze(diseasedData(subject,:,keep == 1));
                                 
                                 if full_correlation == 1
@@ -197,8 +214,9 @@ for pipeline_ = 1:3
                                     allCorrelations = nets_netmats(scrubbedData',convert_to_z,'ridgep',partialCorrelationRegularization);
                                 end
 
-								correlationMatrixDiseased(subject,:,:) = allCorrelations;
+                                nans2(simulation) = nans2(simulation) + sum(isnan(allCorrelations(:)));
                                 
+                                correlationMatrixDiseased(subject,:,:) = allCorrelations;
                             end
                             
                             %% Perform two sample t-test for each parcel
@@ -230,18 +248,16 @@ for pipeline_ = 1:3
                                     errors1(simulation) = 1;
                                 end
                                 
-                                try
-                                    [p_uncorrected,p_corrected2] = nets_glm(netmats,'design.mat','design2.con',0,nPermss);
+                                %try
+                                %    [p_uncorrected,p_corrected2] = nets_glm(netmats,'design.mat','design2.con',0,nPerms);
                                     
-                                    if max(p_corrected2(:)) > 0.95
-                                        FWE2(simulation) = 1;
-                                    end
+                                %    if max(p_corrected2(:)) > 0.95
+                                %        FWE2(simulation) = 1;
+                                %    end
                                     
-                                    size(p_corrected2)
-                                    
-                                catch
-                                    errors2(simulation) = 1;
-                                end
+                                %catch
+                                %    errors2(simulation) = 1;
+                                %end
                                 
                             else
                                 
@@ -255,8 +271,11 @@ for pipeline_ = 1:3
                                             diseased = correlationMatrixDiseased(:,p1,p2);
                                             
                                             try
-                                                [H,P,CI,STATS] = ttest2(controls,diseased);
-                                                %[H,P,CI,STATS] = ttest2(controls,diseased,'vartype','unequal');
+                                                if unequalVariance == 0
+                                                    [H,P,CI,STATS] = ttest2(controls,diseased);
+                                                elseif unequalVariance == 1
+                                                    [H,P,CI,STATS] = ttest2(controls,diseased,'vartype','unequal');
+                                                end
                                                 t_scores(p1,p2) = STATS.tstat;
                                             catch
                                                 errors1(simulation) = 1;
@@ -289,6 +308,9 @@ for pipeline_ = 1:3
                         
                         errors2_total(pipeline_,preprocessing_,site_,fisher,correlationType,iteration) = sum(errors2);
                         
+                        numberOfNansControls(pipeline_,preprocessing_,site_,fisher,correlationType,iteration) = sum(nans1);
+                        
+                        numberOfNansDiseased(pipeline_,preprocessing_,site_,fisher,correlationType,iteration) = sum(nans2);
                         
                         % Clean temp directory
                         if permutation == 1
@@ -310,7 +332,15 @@ FWEs1
 
 FWEs2
 
-save([site '_FWEs_' num2str(numberOfParcels) 'parcels_partialregularisation_100.mat'],'FWEs1','FWEs2')
+if partialCorrelationRegularization == 0.1
+    save(['FWEs_' num2str(numberOfParcels) 'parcels_partialregularisation_01.mat'],'FWEs1','FWEs2')
+elseif partialCorrelationRegularization == 1
+    save(['FWEs_' num2str(numberOfParcels) 'parcels_partialregularisation_1.mat'],'FWEs1','FWEs2')
+elseif partialCorrelationRegularization == 10
+    save(['FWEs_' num2str(numberOfParcels) 'parcels_partialregularisation_10.mat'],'FWEs1','FWEs2')
+elseif partialCorrelationRegularization == 100
+    save(['FWEs_' num2str(numberOfParcels) 'parcels_partialregularisation_100.mat'],'FWEs1','FWEs2')
+end
 
 delete(myPool)
 
