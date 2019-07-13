@@ -5,6 +5,8 @@ clc
 addpath('Packages/FSLNets')
 addpath(sprintf('%s/etc/matlab',getenv('FSLDIR')))
 
+correlationIncrease = 0.09;
+
 % Number of random group analyses per parameter combination
 simulations = 1000;
 
@@ -22,7 +24,7 @@ permutation = 0;
 nPerms = 1000;
 
 % Regularization for ridge p (Tikhonov)
-partialCorrelationRegularization = 1;
+partialCorrelationRegularization = 0.1;
 
 % Number of subjects in each random group
 numberOfControls = 20;
@@ -42,7 +44,7 @@ for p1 = 1:numberOfParcels
     end
 end
 
-myPool = parpool(28);
+myPool = parpool(25);
 
 % pipeline, preprocessing, site, convert to z,
 % correlation type, mean scrubbing diseased
@@ -52,8 +54,8 @@ FWEs2 = zeros(4,4,2,3,2,10);
 errors1_total = zeros(4,4,2,3,2,10);
 errors2_total = zeros(4,4,2,3,2,10);
 
-numberOfNansControls = zeros(4,4,2,3,2,10,numberOfControls,simulations);
-numberOfNansDiseased = zeros(4,4,2,3,2,10,numberOfDiseased,simulations);
+numberOfNansControls = zeros(4,4,2,3,2,10);
+numberOfNansDiseased = zeros(4,4,2,3,2,10);
 
 %-------
 
@@ -69,7 +71,7 @@ for pipeline_ = 1:3
         pipeline = 'niak';
     end
     
-    for preprocessing_ = 1:4
+    for preprocessing_ = [1 2 3 4]
         
         if preprocessing_ == 1
             preprocessing = 'filt_global';
@@ -102,7 +104,7 @@ for pipeline_ = 1:3
                 
                 site = 'UM_1';
                 numberOfSubjects = 82;
-                
+               
                 if pipeline_ == 1
                     numberOfTimepoints = 295;
                 elseif pipeline_ == 3
@@ -150,7 +152,7 @@ for pipeline_ = 1:3
                     convert_to_z = -1; % Conversion without autocorrelation correction
                 end
                 
-                for correlationType = 2:2
+                for correlationType = 1:2
                     
                     if correlationType == 1
                         full_correlation = 1;
@@ -192,7 +194,7 @@ for pipeline_ = 1:3
                             % Randomly apply scrubbing to each control subject, and
                             % calculate correlation matrix
                             for subject = 1:numberOfControls
-                                
+                            
 								% Randomize how many time points to save
                                 scrubbingPortion = abs(round((meanScrubbingControls + stdScrubbingControls * randn)));
                                 savedTimepoints = round(numberOfTimepoints * (100 - scrubbingPortion)/100);
@@ -202,7 +204,6 @@ for pipeline_ = 1:3
                                 % Do random scrubbing
                                 %keep = [ones(savedTimepoints,1); zeros(numberOfTimepoints - savedTimepoints,1)];
                                 %keep = keep(randperm(numberOfTimepoints));
-                                % More realistic scrubbing
                                 keep = generateRandomScrubbing(numberOfTimepoints,savedTimepoints);
                                 scrubbedData = squeeze(controlData(subject,:,keep == 1));
                                 
@@ -217,10 +218,17 @@ for pipeline_ = 1:3
                                 correlationMatrixControls(subject,:,:) = allCorrelations;
                             end
                             
+                            
+                            % Randomize where to increase correlation
+                            firstROI = 1;
+                            
                             % Randomly apply scrubbing to each diseased subject,
                             % and calculate correlation matrix
                             for subject = 1:numberOfDiseased
                                 
+                                % Make correlations stronger
+                                diseasedData(subject,firstROI:(firstROI+9),:) = diseasedData(subject,firstROI:(firstROI+9),:) + correlationIncrease * diseasedData(subject,(firstROI+10):(firstROI+10+9),:);
+                                                              
 								% Randomize how many time points to save
                                 scrubbingPortion = abs(round((meanScrubbingDiseased + stdScrubbingDiseased * randn)));
                                 savedTimepoints = round(numberOfTimepoints * (100 - scrubbingPortion)/100);
@@ -230,7 +238,6 @@ for pipeline_ = 1:3
                                 % Do random scrubbing
                                 %keep = [ones(savedTimepoints,1); zeros(numberOfTimepoints - savedTimepoints,1)];
                                 %keep = keep(randperm(numberOfTimepoints));
-                                % More realistic scrubbing
                                 keep = generateRandomScrubbing(numberOfTimepoints,savedTimepoints);
                                 scrubbedData = squeeze(diseasedData(subject,:,keep == 1));
                                 
@@ -338,6 +345,7 @@ for pipeline_ = 1:3
                         
                         numberOfNansDiseased(pipeline_,preprocessing_,site_,fisher,correlationType,iteration) = sum(nans2);
                         
+                        
                         % Clean temp directory
                         if permutation == 1
                             system('rm /tmp/*.nii.gz')
@@ -358,7 +366,11 @@ FWEs1
 
 FWEs2
 
-save(['FWEs_' num2str(numberOfParcels) 'parcels_partialregularisation_' num2str(partialCorrelationRegularization) '.mat'],'FWEs1','FWEs2')
+save(['power_correlationIncrease_' num2str(correlationIncrease)  '_newscrubbingfunction_10modifiedparcels_constant.mat'],'FWEs1','FWEs2','numberOfNansControls','numberOfNansDiseased');
+
+
+%save(['FWEs_' num2str(numberOfParcels) 'parcels.mat'],'FWEs1','FWEs2')
+
 
 delete(myPool)
 
