@@ -4,7 +4,7 @@ close all
 
 % Read data from text files and save in Matlab formats
 
-for pipeline_ = 4:4
+for pipeline_ = 1:1
     
     if pipeline_ == 1
         pipeline = 'ccs';
@@ -45,7 +45,9 @@ for pipeline_ = 4:4
             elseif site_ == 2
                 site = 'UM_1';
                 numberOfSubjects = 82;
-                if pipeline_ == 3
+                if pipeline_ == 1
+                    numberOfTimepoints = 295;
+                elseif pipeline_ == 3
                     numberOfTimepoints = 295;
                 else
                     numberOfTimepoints = 296;
@@ -66,7 +68,7 @@ for pipeline_ = 4:4
             disp('Reading data')
             for subject = 1:numberOfSubjects
                 subject
-                filename = files(subject).name
+                filename = files(subject).name;
                 data = importdata([currentDirectory filename],delimiterIn,headerlinesIn);
                 temp = (data.data)';  
                 if pipeline_ == 4
