@@ -22,7 +22,7 @@ permutation = 0;
 nPerms = 1000;
 
 % Regularization for ridge p (Tikhonov)
-partialCorrelationRegularization = 1;
+partialCorrelationRegularization = 0.1;
 
 % Number of subjects in each random group
 numberOfControls = 20;
@@ -42,12 +42,13 @@ for p1 = 1:numberOfParcels
     end
 end
 
-myPool = parpool(28);
+myPool = parpool(25);
 
 % pipeline, preprocessing, site, convert to z,
 % correlation type, mean scrubbing diseased
 FWEs1 = zeros(4,4,2,3,2,10);
 FWEs2 = zeros(4,4,2,3,2,10);
+FWEs_twosided = zeros(4,4,2,3,2,10);
 
 errors1_total = zeros(4,4,2,3,2,10);
 errors2_total = zeros(4,4,2,3,2,10);
@@ -117,6 +118,7 @@ for pipeline_ = 1:3
             load([site '_' pipeline '_' preprocessing '_cc200.mat'])
             
             % Find subjects with data for all parcels of interest
+            % (some subjects have all zeros for some parcels)
             goodSubjects = 0;
             for subject = 1:numberOfSubjects
                 tempData = allData(subject,1:numberOfParcels,:);
@@ -150,7 +152,7 @@ for pipeline_ = 1:3
                     convert_to_z = -1; % Conversion without autocorrelation correction
                 end
                 
-                for correlationType = 2:2
+                for correlationType = 1:2
                     
                     if correlationType == 1
                         full_correlation = 1;
@@ -165,6 +167,7 @@ for pipeline_ = 1:3
                         
                         FWE1 = zeros(simulations,1);
                         FWE2 = zeros(simulations,1);
+                        FWE_twosided = zeros(simulations,1);
                         
                         errors1 = zeros(simulations,1);
                         errors2 = zeros(simulations,1);
@@ -202,6 +205,7 @@ for pipeline_ = 1:3
                                 % Do random scrubbing
                                 %keep = [ones(savedTimepoints,1); zeros(numberOfTimepoints - savedTimepoints,1)];
                                 %keep = keep(randperm(numberOfTimepoints));
+                                
                                 % More realistic scrubbing
                                 keep = generateRandomScrubbing(numberOfTimepoints,savedTimepoints);
                                 scrubbedData = squeeze(controlData(subject,:,keep == 1));
@@ -230,6 +234,7 @@ for pipeline_ = 1:3
                                 % Do random scrubbing
                                 %keep = [ones(savedTimepoints,1); zeros(numberOfTimepoints - savedTimepoints,1)];
                                 %keep = keep(randperm(numberOfTimepoints));
+                                
                                 % More realistic scrubbing
                                 keep = generateRandomScrubbing(numberOfTimepoints,savedTimepoints);
                                 scrubbedData = squeeze(diseasedData(subject,:,keep == 1));
@@ -314,6 +319,8 @@ for pipeline_ = 1:3
                                 threshold = icdf('t',1-0.05,numberOfControls + numberOfDiseased - 2);
                                 FWEthreshold = icdf('t',1-0.05/numberOfTests,numberOfControls + numberOfDiseased - 2);
                                 
+                                FWEthreshold_twosided = icdf('t',1-0.025/numberOfTests,numberOfControls + numberOfDiseased - 2);
+                                
                                 if max(t_scores(:)) > FWEthreshold
                                     FWE1(simulation) = 1;
                                 end
@@ -322,6 +329,13 @@ for pipeline_ = 1:3
                                     FWE2(simulation) = 1;
                                 end
                                 
+                                if max(t_scores(:)) > FWEthreshold_twosided
+                                    FWE_twosided(simulation) = 1;
+                                elseif min(t_scores(:)) < -1*FWEthreshold_twosided
+                                    FWE_twosided(simulation) = 1;
+                                end
+                                
+                                
                             end
                             
                         end
@@ -329,6 +343,8 @@ for pipeline_ = 1:3
                         FWEs1(pipeline_,preprocessing_,site_,fisher,correlationType,iteration) = sum(FWE1)/simulations * 100;
                         
                         FWEs2(pipeline_,preprocessing_,site_,fisher,correlationType,iteration) = sum(FWE2)/simulations * 100;
+                        
+                        FWEs_twosided(pipeline_,preprocessing_,site_,fisher,correlationType,iteration) = sum(FWE_twosided)/simulations * 100;
                         
                         errors1_total(pipeline_,preprocessing_,site_,fisher,correlationType,iteration) = sum(errors1);
                         
@@ -358,7 +374,7 @@ FWEs1
 
 FWEs2
 
-save(['FWEs_' num2str(numberOfParcels) 'parcels_partialregularisation_' num2str(partialCorrelationRegularization) '.mat'],'FWEs1','FWEs2')
+save(['FWEs_' num2str(numberOfParcels) 'parcels_partialregularisation_' num2str(partialCorrelationRegularization) '_realisticscrubbingfunction_twosided.mat'],'FWEs1','FWEs2','FWEs_twosided')
 
 delete(myPool)
 
