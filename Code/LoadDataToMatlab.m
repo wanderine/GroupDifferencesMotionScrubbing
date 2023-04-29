@@ -2,9 +2,17 @@ clc
 clear all
 close all
 
+allSubjects = 0;
+if allSubjects == 0
+    allSubjectString = '';
+else
+    allSubjectString = '_allSubjects';
+end
+
 % Read data from text files and save in Matlab formats
 
-for pipeline_ = 1:1
+
+for pipeline_ = 1:3
     
     if pipeline_ == 1
         pipeline = 'ccs';
@@ -28,11 +36,17 @@ for pipeline_ = 1:1
             preprocessing = 'nofilt_noglobal';
         end
         
-        for site_ = 2:2
+        for site_ = 1:2
             
             if site_ == 1
                 site = 'NYU';
-                numberOfSubjects = 171;
+
+                if allSubjects == 1
+		    numberOfSubjects = 175;
+                else 
+                    numberOfSubjects = 171;
+                end
+
                 if pipeline_ == 1
                     numberOfTimepoints = 175;
                 elseif pipeline_ == 2
@@ -44,7 +58,13 @@ for pipeline_ = 1:1
                 end
             elseif site_ == 2
                 site = 'UM_1';
-                numberOfSubjects = 82;
+
+                if allSubjects == 1
+		    numberOfSubjects = 106;                
+                else 
+                    numberOfSubjects = 82;
+                end
+
                 if pipeline_ == 1
                     numberOfTimepoints = 295;
                 elseif pipeline_ == 3
@@ -58,7 +78,7 @@ for pipeline_ = 1:1
             
             allData = zeros(numberOfSubjects,numberOfParcels,numberOfTimepoints);
             
-            currentDirectory = ['rois_cc200/Outputs/' pipeline '/' preprocessing '/rois_cc200/'];
+            currentDirectory = ['rois_cc200' allSubjectString '/Outputs/' pipeline '/' preprocessing '/rois_cc200/'];
             
             % Read data
             files = dir([currentDirectory site '*']);
@@ -79,17 +99,9 @@ for pipeline_ = 1:1
                 end
             end
             
-            save([site '_' pipeline '_' preprocessing '_cc200.mat'],'allData')
+            save([site allSubjectString '_' pipeline '_' preprocessing '_cc200.mat'],'allData')
             
         end
     end
 end
-
-
-
-
-
-
-
-
 
