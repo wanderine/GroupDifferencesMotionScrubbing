@@ -5,6 +5,14 @@ clc
 addpath('Packages/FSLNets')
 addpath(sprintf('%s/etc/matlab',getenv('FSLDIR')))
 
+% Use all subjects, or only those with mean framewise displacement less than 0.2
+allSubjects = 0;
+if allSubjects == 0
+    allSubjectString = '';
+else
+    allSubjectString = '_allSubjects';
+end
+
 % Number of random group analyses per parameter combination
 simulations = 1000;
 
@@ -42,6 +50,7 @@ for p1 = 1:numberOfParcels
     end
 end
 
+% Number of CPU threads
 myPool = parpool(25);
 
 % pipeline, preprocessing, site, convert to z,
@@ -61,11 +70,11 @@ numberOfNansDiseased = zeros(4,4,2,3,2,10,numberOfDiseased,simulations);
 for pipeline_ = 1:3
     
     if pipeline_ == 1
-        pipeline = 'ccs';
+        pipeline = 'ccs'
     elseif pipeline_ == 2
-        pipeline = 'cpac';
+        pipeline = 'cpac'
     elseif pipeline_ == 3
-        pipeline = 'dparsf';
+        pipeline = 'dparsf'
     elseif pipeline_ == 4
         pipeline = 'niak';
     end
@@ -73,22 +82,27 @@ for pipeline_ = 1:3
     for preprocessing_ = 1:4
         
         if preprocessing_ == 1
-            preprocessing = 'filt_global';
+            preprocessing = 'filt_global'
         elseif preprocessing_ == 2
-            preprocessing = 'filt_noglobal';
+            preprocessing = 'filt_noglobal'
         elseif preprocessing_ == 3
-            preprocessing = 'nofilt_global';
+            preprocessing = 'nofilt_global'
         elseif preprocessing_ == 4
-            preprocessing = 'nofilt_noglobal';
+            preprocessing = 'nofilt_noglobal'
         end
         
         for site_ = 1:2
             
             if site_ == 1
                 
-                site = 'NYU';
-                numberOfSubjects = 171;
-                
+                site = 'NYU'
+
+                if allSubjects == 1
+		    numberOfSubjects = 175;
+	        else 
+                    numberOfSubjects = 171;
+                end
+
                 if pipeline_ == 1
                     numberOfTimepoints = 175;
                 elseif pipeline_ == 2
@@ -101,9 +115,13 @@ for pipeline_ = 1:3
                 
             elseif site_ == 2
                 
-                site = 'UM_1';
-                numberOfSubjects = 82;
-                
+                site = 'UM_1'
+                if allSubjects == 1
+		    numberOfSubjects = 106;
+                else
+                    numberOfSubjects = 82;
+                end
+
                 if pipeline_ == 1
                     numberOfTimepoints = 295;
                 elseif pipeline_ == 3
@@ -115,7 +133,7 @@ for pipeline_ = 1:3
             end
             
             % Load current data
-            load([site '_' pipeline '_' preprocessing '_cc200.mat'])
+            load([site allSubjectString '_' pipeline '_' preprocessing '_cc200.mat'])
             
             % Find subjects with data for all parcels of interest
             % (some subjects have all zeros for some parcels)
@@ -177,7 +195,7 @@ for pipeline_ = 1:3
                         
                         parfor simulation = 1:simulations
                             
-                            simulation
+                            %simulation
                             
                             % Randomly shuffle subjects
                             randomizedSubjects = randperm(numberOfSubjects);
@@ -374,10 +392,8 @@ FWEs1
 
 FWEs2
 
-save(['FWEs_' num2str(numberOfParcels) 'parcels_partialregularisation_' num2str(partialCorrelationRegularization) '_realisticscrubbingfunction_twosided.mat'],'FWEs1','FWEs2','FWEs_twosided')
+FWEs_twosided
+
+save(['FWEs_' num2str(numberOfParcels) 'parcels_partialregularisation_' num2str(partialCorrelationRegularization) '_realisticscrubbingfunction' allSubjectString '_twosided.mat'],'FWEs1','FWEs2','FWEs_twosided')
 
 delete(myPool)
-
-
-
-
