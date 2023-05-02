@@ -1,3 +1,3 @@
 #!/bin/bash
 
-matlab -nodisplay -nodesktop -r "run performrandomgroupanalyses.m"
+matlab -nodisplay -nodesktop -r "run performrandomgroupanalysesABIDE.m"
